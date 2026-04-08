@@ -1,0 +1,94 @@
+name: AgriDecisionEnv-v3
+description: >
+  Sustainable Farming Decision Environment for reinforcement learning.
+  An agent manages crop selection, fertilizer, and irrigation across
+  multiple seasons to maximize yield while maintaining long-term soil
+  health and resource sustainability.
+
+version: "3.0.0"
+
+# ── Entrypoint (exactly as OpenEnv validator expects) ────────────────────────
+entrypoint: inference.py
+environment_class: AgriEnv
+environment_module: env
+
+episode_length: 5
+scenarios:
+  - default
+  - fertile
+  - drought
+  - degraded
+early_termination: true
+
+observation_space:
+  nitrogen:     {type: float, range: [0.0, 1.0]}
+  moisture:     {type: float, range: [0.0, 1.0]}
+  soil_quality: {type: float, range: [0.0, 1.0]}
+  last_crop:    {type: str,   values: [rice, wheat, none]}
+  season:       {type: int,   range: [0, 10]}
+  weather:      {type: str,   values: [rainy, normal, drought]}
+  groundwater:  {type: float, range: [0.0, 1.0]}
+  budget:       {type: float}
+
+action_space:
+  crop:       {type: str,   values: [rice, wheat, none]}
+  fertilizer: {type: float, range: [0.0, 1.0]}
+  irrigation: {type: float, range: [0.0, 1.0]}
+
+reward:
+  type: float
+  range: [0.0, 1.0]
+  normalized: true
+  components:
+    - yield_score
+    - soil_quality_bonus
+    - fertilizer_penalty
+    - delayed_fertilizer_penalty
+    - irrigation_penalty
+    - monocrop_penalty
+    - groundwater_penalty
+    - budget_penalty
+
+tasks:
+  easy:
+    steps: 1
+    file: tasks/easy.py
+    entrypoint: run_easy_task
+    description: Single-step yield maximization
+  medium:
+    steps: 3
+    file: tasks/medium.py
+    entrypoint: run_medium_task
+    description: Balance soil health and yield over 3 seasons
+  hard:
+    steps: 5
+    file: tasks/hard.py
+    entrypoint: run_hard_task
+    description: Full episode with stochastic weather, delayed effects, constraints
+
+baseline_agents:
+  random:
+    file: baseline_agents.py
+    entrypoint: random_policy
+  rule_based:
+    file: baseline_agents.py
+    entrypoint: rule_based_policy
+  greedy:
+    file: baseline_agents.py
+    entrypoint: greedy_policy
+
+models:
+  recommended:
+    - Qwen/Qwen2.5-7B-Instruct
+    - meta-llama/Meta-Llama-3-8B-Instruct
+  inference_api: https://router.huggingface.co/v1
+
+metadata:
+  domain: agriculture
+  tags: [rl, sustainability, multi-objective, delayed-rewards, resource-constraints]
+  requires_gpu: false
+  cpu_compatible: true
+  python: ">=3.10"
+  dependencies:
+    - pydantic>=2.0
+    - openai>=1.0
