@@ -1,3 +1,4 @@
+id: AgriDecisionEnv-v3
 name: AgriDecisionEnv-v3
 description: >
   Sustainable Farming Decision Environment for reinforcement learning.
@@ -7,7 +8,7 @@ description: >
 
 version: "3.0.0"
 
-# ── Entrypoint (exactly as OpenEnv validator expects) ────────────────────────
+# Entrypoint metadata used by local tooling.
 entrypoint: inference.py
 environment_class: AgriEnv
 environment_module: env
@@ -21,17 +22,17 @@ scenarios:
 early_termination: true
 
 observation_space:
-  nitrogen:     {type: float, range: [0.0, 1.0]}
-  moisture:     {type: float, range: [0.0, 1.0]}
+  nitrogen: {type: float, range: [0.0, 1.0]}
+  moisture: {type: float, range: [0.0, 1.0]}
   soil_quality: {type: float, range: [0.0, 1.0]}
-  last_crop:    {type: str,   values: [rice, wheat, none]}
-  season:       {type: int,   range: [0, 10]}
-  weather:      {type: str,   values: [rainy, normal, drought]}
-  groundwater:  {type: float, range: [0.0, 1.0]}
-  budget:       {type: float}
+  last_crop: {type: str, values: [rice, wheat, none]}
+  season: {type: int, range: [0, 10]}
+  weather: {type: str, values: [rainy, normal, drought]}
+  groundwater: {type: float, range: [0.0, 1.0]}
+  budget: {type: float}
 
 action_space:
-  crop:       {type: str,   values: [rice, wheat, none]}
+  crop: {type: str, values: [rice, wheat, none]}
   fertilizer: {type: float, range: [0.0, 1.0]}
   irrigation: {type: float, range: [0.0, 1.0]}
 
@@ -49,25 +50,32 @@ reward:
     - groundwater_penalty
     - budget_penalty
 
+# Validator-facing task manifest.
+# The hackathon validator appears to discover tasks via this list shape
+# and the HTTP grader paths below rather than Python import strings.
 tasks:
-  easy:
-    steps: 1
-    file: tasks/easy.py
-    entrypoint: run_easy_task
-    grader: tasks.easy:grade_easy
+  - id: easy
+    difficulty: easy
+    max_steps: 1
     description: Single-step yield maximization
-  medium:
-    steps: 3
-    file: tasks/medium.py
-    entrypoint: run_medium_task
-    grader: tasks.medium:grade_medium
+    grader: /grade/easy
+  - id: medium
+    difficulty: medium
+    max_steps: 3
     description: Balance soil health and yield over 3 seasons
-  hard:
-    steps: 5
-    file: tasks/hard.py
-    entrypoint: run_hard_task
-    grader: tasks.hard:grade_hard
+    grader: /grade/medium
+  - id: hard
+    difficulty: hard
+    max_steps: 5
     description: Full episode with stochastic weather, delayed effects, constraints
+    grader: /grade/hard
+
+endpoints:
+  reset: POST /reset
+  step: POST /step
+  state: GET /state
+  tasks: GET /tasks
+  validate: GET /validate
 
 baseline_agents:
   random:
