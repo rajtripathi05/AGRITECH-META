@@ -10,6 +10,13 @@ tags:
 
 # 🌱 AgriDecisionEnv v3 – Sustainable Farming RL Environment
 
+![OpenEnv](https://img.shields.io/badge/OpenEnv-Compatible-green)
+![Docker](https://img.shields.io/badge/SDK-Docker-blue)
+![RL](https://img.shields.io/badge/Type-Reinforcement%20Learning-orange)
+![Sustainability](https://img.shields.io/badge/Focus-Sustainability-brightgreen)
+![Status](https://img.shields.io/badge/Status-Active-success)
+
+
 ## 🚀 Overview
 
 AgriDecisionEnv v3 is a real-world OpenEnv-compatible environment designed to evaluate AI agents on multi-season agricultural decision-making under uncertainty, delayed effects, and resource constraints.
