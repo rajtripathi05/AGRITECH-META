@@ -1,28 +1,54 @@
 ---
-title: Soil Health Intelligence
+title: AgriDecisionEnv v3
 emoji: 🌱
 colorFrom: green
 colorTo: blue
 sdk: docker
 tags:
-  - openenv
+- openenv
 ---
 
-# AgriDecisionEnv v3 – Sustainable Farming RL Environment
+# 🌱 AgriDecisionEnv v3 – Sustainable Farming RL Environment
 
-## Problem Motivation
+## 🚀 Overview
 
-Soil degradation affects over 33% of the world's arable land, driven by monocropping, over-fertilization, and unsustainable irrigation. Traditional farming decision-support systems rely on rigid rule engines. This environment provides a testbed for training AI agents to make adaptive, multi-objective farming decisions that balance immediate yield against long-term soil and water sustainability.
+AgriDecisionEnv v3 is a real-world OpenEnv-compatible environment designed to evaluate AI agents on multi-season agricultural decision-making under uncertainty, delayed effects, and resource constraints.
+
+The environment models how farmers must balance:
+- 🌾 Crop yield (short-term productivity)
+- 🌍 Soil health (long-term sustainability)
+- 💧 Water usage (groundwater limits)
+- 💰 Budget constraints (economic feasibility)
 
 This environment evaluates agent performance under delayed rewards, stochastic climate conditions, and resource constraints, closely mimicking real-world agricultural decision-making.
 
 ---
 
-## Environment Design
+## 🌍 Real-World Motivation
 
-The environment simulates a farm over multiple growing seasons. At each step the agent observes the farm state and chooses a crop, fertilizer level, and irrigation level. Consequences are immediate (yield) and delayed (fertilizer accumulation degrades soil over multiple steps).
+Over 33% of global arable land is degraded due to:
+- monocropping  
+- excessive fertilizer use  
+- unsustainable irrigation  
 
-### Scenarios
+Existing systems rely on static heuristics and fail under dynamic conditions.
+
+👉 This project provides a benchmark environment for training and evaluating intelligent agents capable of adaptive, long-term agricultural decision-making.
+
+---
+
+## 🧠 Environment Design
+
+The environment simulates a farm across multiple seasons.  
+At each timestep, the agent observes the current state and selects actions.
+
+### 🔁 Interaction Loop
+
+State → Agent → Action → Environment → New State + Reward
+
+---
+
+## 📊 Scenario Initialization
 
 | Scenario  | Nitrogen | Moisture | Groundwater | Budget |
 |-----------|----------|----------|-------------|--------|
@@ -33,170 +59,176 @@ The environment simulates a farm over multiple growing seasons. At each step the
 
 ---
 
-## State / Observation
+## 🔍 Observation Space
 
 | Field         | Type  | Range        | Description                          |
 |---------------|-------|--------------|--------------------------------------|
 | nitrogen      | float | [0, 1]       | Soil nitrogen level                  |
 | moisture      | float | [0, 1]       | Soil moisture level                  |
-| soil_quality  | float | [0, 1]       | Derived: 0.6×N + 0.4×M              |
-| last_crop     | str   | rice/wheat/none | Previous crop planted             |
-| season        | int   | [0, 10]      | Current step index                   |
-| weather       | str   | rainy/normal/drought | Current weather condition  |
-| groundwater   | float | [0, 1]       | Available groundwater reserve        |
-| budget        | float | unbounded    | Remaining financial budget           |
+| soil_quality  | float | [0, 1]       | Derived soil health metric           |
+| last_crop     | str   | rice/wheat/none | Previous crop                    |
+| season        | int   | [0, 10]      | Current timestep                     |
+| weather       | str   | rainy/normal/drought | Climate condition         |
+| groundwater   | float | [0, 1]       | Available groundwater                |
+| budget        | float | [0, 150]     | Remaining resources                  |
 
 ---
 
-## Action Space
+## 🎯 Action Space
 
 | Field       | Type  | Range  | Description                        |
 |-------------|-------|--------|------------------------------------|
-| crop        | str   | rice/wheat/none | Crop to plant this season  |
-| fertilizer  | float | [0, 1] | Fertilizer application rate        |
-| irrigation  | float | [0, 1] | Irrigation application rate        |
+| crop        | str   | rice/wheat/none | Crop selection            |
+| fertilizer  | float | [0, 1] | Fertilizer level                   |
+| irrigation  | float | [0, 1] | Irrigation level                   |
 
 ---
 
-## Reward Function
+## ⚙️ Reward Function
 
-```
 reward = clamp(
     yield_score
-    + soil_quality_bonus        (+0.15 if N≥0.45 and M≥0.35)
-    - fertilizer_penalty        (excess above 0.60)
-    - delayed_fert_penalty      (rolling 3-step avg above 0.60)
-    - irrigation_penalty        (excess above 0.65)
-    - monocrop_penalty          (-0.12 if same crop repeated)
-    - groundwater_penalty       (when groundwater < 0.20)
-    - budget_penalty            (when budget < 0)
+    + soil_quality_bonus
+    - fertilizer_penalty
+    - delayed_fertilizer_penalty
+    - irrigation_penalty
+    - monocrop_penalty
+    - groundwater_penalty
+    - budget_penalty
 , 0.0, 1.0)
-```
 
-All reward values are normalized to **[0.0, 1.0]**.
+### Key Properties
 
----
-
-## Task Descriptions
-
-### Easy (1 step)
-Single-step optimization. Score = weighted sum of yield and soil quality after one action. No weather variation.
-
-### Medium (3 steps)
-Multi-season balance. Score rewards a positive soil improvement trend combined with cumulative yield. Monocropping and overuse are penalized.
-
-### Hard (5 steps)
-Full episode. Includes stochastic weather (bounded, seeded), delayed fertilizer effects, groundwater depletion, and budget constraints. Score penalizes long-term nitrogen degradation and rewards sustainability (final soil ≥ initial soil).
+- Dense reward signal (not sparse)
+- Penalizes unsustainable practices
+- Encourages long-term planning
+- Strictly normalized to [0.0, 1.0]
 
 ---
 
-## File Structure
+## 🧪 Task Design
 
-```
-agri_v3/
-├── models.py           # Pydantic models: Observation, Action, Reward, StepInfo
-├── env.py              # AgriEnv class (reset / step / state)
-├── tasks/
-│   ├── easy.py
-│   ├── medium.py
-│   └── hard.py
-├── baseline_agents.py  # random_policy, rule_based_policy, greedy_policy
-├── inference.py        # LLM agent loop with strict OpenEnv log format
-├── openenv.yaml        # Environment metadata and config
-├── Dockerfile
-└── README.md
-```
+### 🟢 Easy (1 step)
+- Objective: maximize immediate yield  
+- Deterministic  
+- No delayed effects  
 
----
+### 🟡 Medium (3 steps)
+- Objective: balance yield and soil improvement  
+- Introduces temporal dependencies  
+- Penalizes overuse  
 
-## How to Run
+### 🔴 Hard (5 steps)
+- Includes:
+  - stochastic weather  
+  - delayed fertilizer effects  
+  - groundwater depletion  
+  - budget constraints  
 
-### Colab (recommended)
-
-```python
-# Cell 1 – install
-!pip install pydantic openai
-
-# Cell 2 – add to path
-import sys
-sys.path.insert(0, '/content/agri_v3')
-
-# Cell 3 – run baseline comparison
-from baseline_agents import run_episode, random_policy, rule_based_policy, greedy_policy
-import random
-
-for name, fn in [
-    ("random",     lambda o: random_policy(o, random.Random(0))),
-    ("rule_based", rule_based_policy),
-    ("greedy",     greedy_policy),
-]:
-    r = run_episode(fn)
-    print(f"{name}: avg_reward={r['avg_reward']} final_soil={r['final_soil']}")
-
-# Cell 4 – run hard task grader
-from tasks.hard import run_hard_task
-from models import Action
-actions = [
-    Action(crop="wheat",  fertilizer=0.3, irrigation=0.5),
-    Action(crop="rice",   fertilizer=0.5, irrigation=0.6),
-    Action(crop="wheat",  fertilizer=0.2, irrigation=0.4),
-    Action(crop="none",   fertilizer=0.0, irrigation=0.2),
-    Action(crop="wheat",  fertilizer=0.3, irrigation=0.4),
-]
-print(f"Hard task score: {run_hard_task(actions)}")
-```
-
-### Docker
-
-```bash
-docker build -t agri-env .
-docker run -e HF_TOKEN=your_token -e AGRI_TASK=hard agri-env
-```
-
-### Local (Linux/macOS)
-
-```bash
-pip install pydantic openai
-HF_TOKEN=your_token AGRI_TASK=hard python inference.py
-```
-
-### Local (Windows PowerShell)
-
-```powershell
-pip install pydantic openai
-$env:HF_TOKEN="your_token"; $env:AGRI_TASK="hard"; python inference.py
-```
+👉 Tests long-term sustainability strategies
 
 ---
 
-## Baseline Results (default scenario, seed=42)
+## 📈 Baseline Results
 
-### LLM Agent (Qwen/Qwen2.5-7B-Instruct via HuggingFace router)
+### LLM Agent (via OpenAI client + HF router)
 
-| Task   | Score  | Steps |
-|--------|--------|-------|
-| easy   | 0.4024 | 1     |
-| medium | 0.4214 | 3     |
-| hard   | 0.2818 | 5     |
+| Task   | Score  |
+|--------|--------|
+| Easy   | 0.47   |
+| Medium | 0.36   |
+| Hard   | 0.33   |
 
-### Rule-based Baselines (hard task, 5 steps)
+### Rule-Based Baselines
 
 | Agent      | Avg Reward | Final Soil | Final Budget |
 |------------|------------|------------|--------------|
-| random     | ~0.21      | ~0.38      | ~35          |
-| rule_based | ~0.44      | ~0.51      | ~48          |
-| greedy     | ~0.38      | ~0.31      | ~15          |
+| Random     | 0.35       | 0.88       | -58.0        |
+| Greedy     | 0.35       | 0.54       | -47.5        |
+| Rule-Based | 0.18       | 0.26       | 2.5          |
 
-The rule-based agent consistently outperforms greedy by preserving soil quality, demonstrating that short-term yield maximization is suboptimal in this environment.
+👉 Rule-based agent conserves budget but trades off yield; greedy/random overspend
 
 ---
 
-## OpenEnv Compliance
+## 🤖 Inference (OpenAI Client)
 
-- `reset()` → `Observation`
-- `step(action)` → `(Observation, Reward, done, StepInfo)`
-- `state()` → `Observation`
-- All rewards in `[0.0, 1.0]`
-- Deterministic grading (seeded RNG)
-- Typed Pydantic models throughout
-- Structured `info` dict returned on every step
+The agent uses the OpenAI client interface for all LLM calls.
+
+Required environment variables:
+- API_BASE_URL  
+- MODEL_NAME  
+- HF_TOKEN  
+
+### Logging Format (STRICT)
+
+[START]  
+[STEP]  
+[END]  
+
+✔ Required for evaluation  
+✔ Fully reproducible  
+
+---
+
+## 🧱 Project Structure
+
+agri_v3/
+├── models.py  
+├── env.py  
+├── tasks/  
+├── baseline_agents.py  
+├── inference.py  
+├── openenv.yaml  
+├── Dockerfile  
+└── README.md  
+
+---
+
+## ⚙️ Setup & Usage
+
+### Local
+pip install pydantic openai  
+HF_TOKEN=your_token python inference.py  
+
+### Docker
+docker build -t agri-env .  
+docker run -e HF_TOKEN=your_token agri-env  
+
+### Hugging Face Spaces
+- SDK: Docker  
+- Tag: openenv  
+- Must respond to /reset  
+
+---
+
+## ✅ OpenEnv Compliance
+
+- reset() → Observation  
+- step(action) → (Observation, float reward, done, info)  
+- state() → Observation  
+
+✔ Typed models  
+✔ Deterministic grading  
+✔ Reward range [0,1]  
+✔ Docker-compatible  
+
+---
+
+## 🧠 Why This Matters
+
+This environment models:
+- real agricultural trade-offs  
+- long-term sustainability challenges  
+- constrained decision-making under uncertainty  
+
+👉 Useful for:
+- RL benchmarking  
+- LLM evaluation  
+- policy simulation  
+
+---
+
+## 🏁 Conclusion
+
+AgriDecisionEnv v3 is a realistic and scalable benchmark for evaluating intelligent agents in sustainable agriculture — where short-term gains often conflict with long-term survival.

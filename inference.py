@@ -8,6 +8,9 @@ FORMAT:
 [END] success=<true|false> steps=<n> score=<score> rewards=<r1,r2,...>
 """
 import os, sys, json, re
+from dotenv import load_dotenv
+
+load_dotenv()
 
 API_BASE_URL       = os.environ.get("API_BASE_URL",    "https://router.huggingface.co/v1")
 MODEL_NAME         = os.environ.get("MODEL_NAME",      "Qwen/Qwen2.5-7B-Instruct")
@@ -150,14 +153,7 @@ def run_inference():
         if done:
             break
 
-    try:
-        if TASK == "easy":
-            from tasks.easy import run_easy_task
-            score = run_easy_task(Action(crop="wheat", fertilizer=0.3, irrigation=0.4))
-        else:
-            score = round(sum(rewards) / max(len(rewards), 1), 4)
-    except Exception:
-        score = round(sum(rewards) / max(len(rewards), 1), 4) if rewards else 0.0
+    score = round(sum(rewards) / max(len(rewards), 1), 4) if rewards else 0.0
 
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
     print(
