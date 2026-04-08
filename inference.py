@@ -12,10 +12,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-API_BASE_URL       = os.environ.get("API_BASE_URL",    "https://router.huggingface.co/v1")
-MODEL_NAME         = os.environ.get("MODEL_NAME",      "Qwen/Qwen2.5-7B-Instruct")
-OPENAI_API_KEY     = os.environ.get("OPENAI_API_KEY",  "")
-HF_TOKEN           = os.environ.get("HF_TOKEN",        "")
+API_BASE_URL       = os.getenv("API_BASE_URL",    "https://router.huggingface.co/v1")
+MODEL_NAME         = os.getenv("MODEL_NAME",      "Qwen/Qwen2.5-7B-Instruct")
+HF_TOKEN           = os.getenv("HF_TOKEN")
+
+# Optional - if you use from_docker_image():
+LOCAL_IMAGE_NAME   = os.getenv("LOCAL_IMAGE_NAME")
 TASK               = os.environ.get("AGRI_TASK",       "hard")
 SCENARIO           = os.environ.get("AGRI_SCENARIO",   "default")
 USE_HARDCODED_PLAN = os.environ.get("USE_HARDCODED_PLAN", "false").lower() == "true"
@@ -38,7 +40,7 @@ HARDCODED_PLAN = [
 
 try:
     from openai import OpenAI
-    _api_key = OPENAI_API_KEY or HF_TOKEN or "placeholder"
+    _api_key = HF_TOKEN or "placeholder"
     _client  = OpenAI(base_url=API_BASE_URL, api_key=_api_key)
 except ImportError:
     _client = None
