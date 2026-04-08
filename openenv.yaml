@@ -54,16 +54,22 @@ tasks:
     steps: 1
     file: tasks/easy.py
     entrypoint: run_easy_task
+    grader: tasks/easy.py
+    grader_function: grade_easy
     description: Single-step yield maximization
   medium:
     steps: 3
     file: tasks/medium.py
     entrypoint: run_medium_task
+    grader: tasks/medium.py
+    grader_function: grade_medium
     description: Balance soil health and yield over 3 seasons
   hard:
     steps: 5
     file: tasks/hard.py
     entrypoint: run_hard_task
+    grader: tasks/hard.py
+    grader_function: grade_hard
     description: Full episode with stochastic weather, delayed effects, constraints
 
 baseline_agents:
