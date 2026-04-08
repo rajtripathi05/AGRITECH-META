@@ -26,10 +26,10 @@ def run_medium_task(actions, scenario="default"):
         if done:
             break
 
-    return grade_medium(soil_trace, yield_accum, penalties)
+    return _score_medium(soil_trace, yield_accum, penalties)
 
 
-def grade_medium(soil_trace, yield_accum, penalties):
+def _score_medium(soil_trace, yield_accum, penalties):
     steps = len(soil_trace) - 1
     if steps == 0:
         return 0.0
@@ -43,6 +43,16 @@ def grade_medium(soil_trace, yield_accum, penalties):
     avg_penalty = sum(penalties) / len(penalties) if penalties else 0.0
     score = 0.40 * trend + 0.45 * avg_yield - 0.15 * avg_penalty
     return round(max(0.0, min(1.0, score)), 4)
+
+
+def grade_medium():
+    """Self-contained grader — callable with no args by the OpenEnv validator."""
+    actions = [
+        Action(crop="wheat", fertilizer=0.3, irrigation=0.5),
+        Action(crop="rice",  fertilizer=0.4, irrigation=0.6),
+        Action(crop="wheat", fertilizer=0.2, irrigation=0.4),
+    ]
+    return run_medium_task(actions, scenario="default")
 
 
 if __name__ == "__main__":
