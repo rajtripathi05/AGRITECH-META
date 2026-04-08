@@ -16,5 +16,11 @@ dependencies = [
     "python-dotenv>=1.0.0",
 ]
 
+[project.scripts]
+server = "uvicorn:main"
+
+[project.entry-points."openenv"]
+server = "server.app:app"
+
 [project.optional-dependencies]
 dev = ["pytest>=7.0"]
