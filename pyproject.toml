@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [project.scripts]
-server = "uvicorn:main"
+server = "server.app:main"
 
 [project.entry-points."openenv"]
 server = "server.app:app"
