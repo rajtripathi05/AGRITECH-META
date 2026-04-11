@@ -1,5 +1,11 @@
+spec_version: 1
 id: AgriDecisionEnv-v3
 name: AgriDecisionEnv-v3
+type: space
+runtime: fastapi
+app: app:app
+port: 7860
+
 description: >
   Sustainable Farming Decision Environment for reinforcement learning.
   An agent manages crop selection, fertilizer, and irrigation across
@@ -58,17 +64,17 @@ tasks:
     difficulty: easy
     max_steps: 1
     description: Single-step yield maximization
-    grader: /grade/easy
+    grader: tasks.easy:grade_easy
   - id: medium
     difficulty: medium
     max_steps: 3
     description: Balance soil health and yield over 3 seasons
-    grader: /grade/medium
+    grader: tasks.medium:grade_medium
   - id: hard
     difficulty: hard
     max_steps: 5
     description: Full episode with stochastic weather, delayed effects, constraints
-    grader: /grade/hard
+    grader: tasks.hard:grade_hard
 
 endpoints:
   reset: POST /reset

@@ -13,6 +13,7 @@ COPY baseline_agents.py ./
 COPY inference.py       ./
 COPY app.py             ./
 COPY tasks/             ./tasks/
+COPY server/            ./server/
 COPY tasks.json         ./
 COPY openenv.yaml       ./
 COPY README.md          ./
