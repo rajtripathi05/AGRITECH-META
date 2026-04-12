@@ -258,6 +258,11 @@ app = create_app(
 )
 
 
+# Remove any SDK-generated /tasks route so our custom one (with grader paths) wins
+from fastapi.routing import APIRoute
+app.router.routes = [r for r in app.router.routes
+                     if not (isinstance(r, APIRoute) and r.path in ("/tasks",))]
+
 # ---------------------------------------------------------------------------
 # Additional endpoints (tasks, grading, validation, inference)
 # ---------------------------------------------------------------------------
