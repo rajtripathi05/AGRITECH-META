@@ -16,8 +16,8 @@ version: "3.0.0"
 
 # Entrypoint metadata used by local tooling.
 entrypoint: inference.py
-environment_class: AgriEnv
-environment_module: env
+environment_class: SelectionGradeEnvironment
+environment_module: app
 
 episode_length: 5
 scenarios:
@@ -64,17 +64,17 @@ tasks:
     difficulty: easy
     max_steps: 1
     description: Single-step yield maximization
-    grader: tasks.easy:grade_easy
+    grader: /grade/easy
   - id: medium
     difficulty: medium
     max_steps: 3
     description: Balance soil health and yield over 3 seasons
-    grader: tasks.medium:grade_medium
+    grader: /grade/medium
   - id: hard
     difficulty: hard
     max_steps: 5
     description: Full episode with stochastic weather, delayed effects, constraints
-    grader: tasks.hard:grade_hard
+    grader: /grade/hard
 
 endpoints:
   reset: POST /reset

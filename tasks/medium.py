@@ -55,6 +55,17 @@ def grade_medium():
     return run_medium_task(actions, scenario="default")
 
 
+def grade_medium_from_state(agri_state):
+    """Score an actual trajectory stored in AgriState for the medium task."""
+    if not agri_state.reward_history:
+        return 0.0
+    return _score_medium(
+        agri_state.soil_trace,
+        sum(agri_state.reward_history),
+        agri_state.penalty_history,
+    )
+
+
 if __name__ == "__main__":
     actions = [
         Action(crop="wheat", fertilizer=0.3, irrigation=0.5),

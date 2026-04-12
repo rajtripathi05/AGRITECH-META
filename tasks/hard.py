@@ -73,6 +73,19 @@ def grade_hard():
     return run_hard_task(actions, scenario="default")
 
 
+def grade_hard_from_state(agri_state):
+    """Score an actual trajectory stored in AgriState for the hard task."""
+    if not agri_state.reward_history:
+        return 0.0
+    return _score_hard(
+        agri_state.nitrogen_trace,
+        agri_state.soil_trace,
+        agri_state.reward_history,
+        agri_state.budget_trace,
+        agri_state.penalty_history,
+    )
+
+
 if __name__ == "__main__":
     actions = [
         Action(crop="wheat", fertilizer=0.3, irrigation=0.5),

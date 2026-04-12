@@ -14,25 +14,37 @@ Exposes:
 
 from __future__ import annotations
 
-import importlib
-import os
-import subprocess
 import sys
+import os
+
+# Fix sys.path BEFORE any local imports
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+import importlib
+import subprocess
 import threading
-from typing import Optional
+import uuid
+from typing import Optional, Dict, Any
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
+from openenv.core.env_server import Environment, create_app
+from openenv.core.env_server.types import (
+    Action as SdkAction,
+    Observation as SdkObservation,
+    State as SdkState,
+)
+
 from env import AgriEnv
-from models import Action
+from models import Action, Observation, AgriState
 
 load_dotenv()
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-app = FastAPI(title="AgriDecisionEnv-v3", version="3.0.0")
+# ---------------------------------------------------------------------------
+# Task manifest & graders (unchanged)
+# ---------------------------------------------------------------------------
 
 TASK_MANIFEST = [
     {
@@ -64,16 +76,191 @@ _TASK_GRADERS = {
     "hard": ("tasks.hard", "grade_hard"),
 }
 
-_env: Optional[AgriEnv] = None
+# ---------------------------------------------------------------------------
+# SDK-inheriting Environment wrapper
+# ---------------------------------------------------------------------------
+
+_DEFAULT_SCENARIO = "default"
 _lock = threading.Lock()
 
 
-def _get_env() -> AgriEnv:
-    global _env
-    if _env is None:
-        raise HTTPException(status_code=400, detail="Call /reset first.")
-    return _env
+class SelectionGradeEnvironment(Environment[Action, Observation, AgriState]):
+    """OpenEnv SDK wrapper around AgriEnv with multi-session support."""
 
+    SUPPORTS_CONCURRENT_SESSIONS = True
+    SESSIONS: Dict[str, Dict[str, Any]] = {}  # episode_id -> session dict
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._current_episode_id: Optional[str] = None
+
+    # ---- helpers ----------------------------------------------------------
+
+    @classmethod
+    def _get_session(cls, episode_id: Optional[str]) -> Optional[Dict[str, Any]]:
+        if episode_id and episode_id in cls.SESSIONS:
+            return cls.SESSIONS[episode_id]
+        return None
+
+    @classmethod
+    def _default_observation(cls) -> Observation:
+        """Return an observation using the 'default' scenario initial values."""
+        env = AgriEnv(scenario="default", seed=42)
+        obs = env.reset()
+        return Observation(
+            nitrogen=obs.nitrogen,
+            moisture=obs.moisture,
+            soil_quality=obs.soil_quality,
+            last_crop=obs.last_crop,
+            season=obs.season,
+            weather=obs.weather,
+            groundwater=obs.groundwater,
+            budget=obs.budget,
+            done=False,
+            reward=None,
+        )
+
+    # ---- SDK abstract methods ---------------------------------------------
+
+    def reset(
+        self,
+        seed: Optional[int] = None,
+        episode_id: Optional[str] = None,
+        **kwargs,
+    ) -> Observation:
+        scenario = kwargs.get("scenario", _DEFAULT_SCENARIO)
+        seed = seed if seed is not None else 42
+        episode_id = episode_id or str(uuid.uuid4())
+        task_id = kwargs.get("task_id", "hard")
+
+        with _lock:
+            env = AgriEnv(scenario=scenario, seed=seed)
+            obs = env.reset()
+
+            agri_state = AgriState(
+                episode_id=episode_id,
+                step_count=0,
+                task_id=task_id,
+                reward_history=[],
+                action_history=[],
+                soil_trace=[obs.soil_quality],
+                nitrogen_trace=[obs.nitrogen],
+                budget_trace=[obs.budget],
+                penalty_history=[],
+            )
+
+            SelectionGradeEnvironment.SESSIONS[episode_id] = {
+                "env": env,
+                "state": agri_state,
+            }
+            self._current_episode_id = episode_id
+
+        return Observation(
+            nitrogen=obs.nitrogen,
+            moisture=obs.moisture,
+            soil_quality=obs.soil_quality,
+            last_crop=obs.last_crop,
+            season=obs.season,
+            weather=obs.weather,
+            groundwater=obs.groundwater,
+            budget=obs.budget,
+            done=False,
+            reward=None,
+        )
+
+    def step(
+        self,
+        action: Action,
+        timeout_s: Optional[float] = None,
+        **kwargs,
+    ) -> Observation:
+        episode_id = kwargs.get("episode_id") or self._current_episode_id
+
+        with _lock:
+            session = self._get_session(episode_id)
+            if session is None:
+                # Auto-reset with defaults if no session exists
+                self.reset(episode_id=episode_id)
+                session = self.SESSIONS[episode_id]
+
+            env: AgriEnv = session["env"]
+            agri_state: AgriState = session["state"]
+
+            try:
+                obs, reward, done, info = env.step(action)
+            except RuntimeError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+            # Update trajectory in state
+            agri_state.step_count += 1
+            agri_state.reward_history.append(reward)
+            agri_state.action_history.append(action.model_dump(exclude={"metadata"}))
+            agri_state.soil_trace.append(info["soil_health"])
+            agri_state.nitrogen_trace.append(obs.nitrogen)
+            agri_state.budget_trace.append(info["budget_remaining"])
+            agri_state.penalty_history.append(sum(info["penalties"].values()))
+
+            final_score = None
+            if done:
+                # Score the actual trajectory using the appropriate grader
+                final_score = _score_from_state(agri_state)
+
+        return Observation(
+            nitrogen=obs.nitrogen,
+            moisture=obs.moisture,
+            soil_quality=obs.soil_quality,
+            last_crop=obs.last_crop,
+            season=obs.season,
+            weather=obs.weather,
+            groundwater=obs.groundwater,
+            budget=obs.budget,
+            done=done,
+            reward=final_score if final_score is not None else round(float(reward), 4),
+        )
+
+    @property
+    def state(self) -> AgriState:
+        session = self._get_session(self._current_episode_id)
+        if session is not None:
+            return session["state"]
+        # No active session — return a default state
+        return AgriState(episode_id=None, step_count=0)
+
+
+# ---------------------------------------------------------------------------
+# Trajectory-based scoring (delegates to task graders)
+# ---------------------------------------------------------------------------
+
+def _score_from_state(agri_state: AgriState) -> float:
+    """Score an episode's actual trajectory using the appropriate task grader."""
+    task_id = agri_state.task_id
+
+    if task_id == "easy":
+        from tasks.easy import grade_easy_from_state
+        return grade_easy_from_state(agri_state)
+    elif task_id == "medium":
+        from tasks.medium import grade_medium_from_state
+        return grade_medium_from_state(agri_state)
+    else:
+        from tasks.hard import grade_hard_from_state
+        return grade_hard_from_state(agri_state)
+
+
+# ---------------------------------------------------------------------------
+# Build app via SDK create_app(), then mount additional endpoints
+# ---------------------------------------------------------------------------
+
+app = create_app(
+    SelectionGradeEnvironment,
+    Action,
+    Observation,
+    env_name="AgriDecisionEnv-v3",
+)
+
+
+# ---------------------------------------------------------------------------
+# Additional endpoints (tasks, grading, validation, inference)
+# ---------------------------------------------------------------------------
 
 def _run_task_grader(task_id: str) -> dict:
     grader_ref = _TASK_GRADERS.get(task_id)
@@ -84,17 +271,6 @@ def _run_task_grader(task_id: str) -> dict:
     module = importlib.import_module(module_name)
     score = round(float(getattr(module, fn_name)()), 4)
     return {"task": task_id, "score": score, "reward": score}
-
-
-class ResetRequest(BaseModel):
-    scenario: str = "default"
-    seed: int = 42
-
-
-class StepRequest(BaseModel):
-    crop: str = "wheat"
-    fertilizer: float = 0.3
-    irrigation: float = 0.4
 
 
 @app.get("/")
@@ -117,57 +293,31 @@ def root():
     }
 
 
-@app.get("/health")
-def health():
-    return {"status": "healthy"}
+@app.get("/tasks")
+def list_tasks():
+    return {"tasks": TASK_MANIFEST, "count": len(TASK_MANIFEST)}
 
 
-@app.post("/reset")
-def reset(req: Optional[ResetRequest] = None):
-    global _env
-    req = req or ResetRequest()
-    with _lock:
-        _env = AgriEnv(scenario=req.scenario, seed=req.seed)
-        obs = _env.reset()
-
-    obs_payload = obs.model_dump()
-    return {
-        "observation": obs_payload,
-        # Keep the raw fields available for older callers that expect the previous shape.
-        **obs_payload,
-        "scenario": req.scenario,
-        "seed": req.seed,
-        "episode_length": 5,
+@app.get("/validate")
+def validate():
+    task_scores = {task["id"]: _run_task_grader(task["id"]) for task in TASK_MANIFEST}
+    checks = {
+        "min_3_tasks": len(TASK_MANIFEST) >= 3,
+        "all_tasks_have_graders": all(task.get("grader") for task in TASK_MANIFEST),
+        "all_scores_in_range": all(
+            0.0 <= score_info["score"] <= 1.0 for score_info in task_scores.values()
+        ),
+        "reset_endpoint": True,
+        "step_endpoint": True,
+        "state_endpoint": True,
     }
-
-
-@app.post("/step")
-def step(req: StepRequest):
-    with _lock:
-        env = _get_env()
-        action = Action(
-            crop=req.crop,
-            fertilizer=req.fertilizer,
-            irrigation=req.irrigation,
-        )
-        try:
-            obs, reward, done, info = env.step(action)
-        except RuntimeError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-
     return {
-        "observation": obs.model_dump(),
-        "reward": round(float(reward), 4),
-        "done": done,
-        "info": info,
+        "valid": all(checks.values()),
+        "checks": checks,
+        "tasks": task_scores,
+        "env_name": "AgriDecisionEnv-v3",
+        "version": "3.0.0",
     }
-
-
-@app.get("/state")
-def state():
-    with _lock:
-        env = _get_env()
-        return env.state().model_dump()
 
 
 @app.post("/inference")
@@ -209,33 +359,6 @@ def run_inference(task: str = "hard", scenario: str = "default"):
         "errors": errors or None,
         "score": score,
         "success": result.returncode == 0,
-    }
-
-
-@app.get("/tasks")
-def list_tasks():
-    return {"tasks": TASK_MANIFEST, "count": len(TASK_MANIFEST)}
-
-
-@app.get("/validate")
-def validate():
-    task_scores = {task["id"]: _run_task_grader(task["id"]) for task in TASK_MANIFEST}
-    checks = {
-        "min_3_tasks": len(TASK_MANIFEST) >= 3,
-        "all_tasks_have_graders": all(task.get("grader") for task in TASK_MANIFEST),
-        "all_scores_in_range": all(
-            0.0 <= score_info["score"] <= 1.0 for score_info in task_scores.values()
-        ),
-        "reset_endpoint": True,
-        "step_endpoint": True,
-        "state_endpoint": True,
-    }
-    return {
-        "valid": all(checks.values()),
-        "checks": checks,
-        "tasks": task_scores,
-        "env_name": "AgriDecisionEnv-v3",
-        "version": "3.0.0",
     }
 
 

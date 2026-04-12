@@ -27,6 +27,22 @@ def grade_easy():
     return run_easy_task(action, scenario="default")
 
 
+def grade_easy_from_state(agri_state):
+    """Score an actual trajectory stored in AgriState for the easy task."""
+    if not agri_state.reward_history:
+        return 0.0
+    # Use the first step's data from the trajectory
+    # The soil_trace has initial + per-step values; penalty_history has per-step totals
+    soil_quality = agri_state.soil_trace[-1] if len(agri_state.soil_trace) > 1 else agri_state.soil_trace[0]
+    reward = agri_state.reward_history[0]
+    total_penalty = agri_state.penalty_history[0] if agri_state.penalty_history else 0.0
+    # Approximate yield_score from reward + penalties (reward = yield + bonus - penalties)
+    # Use the same formula: 0.70 * yield + 0.30 * soil - 0.20 * penalty
+    # Since we have reward and soil from the actual run, use them directly
+    raw = 0.70 * reward + 0.30 * soil_quality - 0.20 * total_penalty
+    return round(max(0.0, min(1.0, raw)), 4)
+
+
 if __name__ == "__main__":
     action = Action(crop="wheat", fertilizer=0.4, irrigation=0.5)
     print(f"Easy score: {run_easy_task(action)}")
